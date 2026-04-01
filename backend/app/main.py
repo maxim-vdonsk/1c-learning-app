@@ -2,15 +2,18 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
-from .core.database import engine, Base
+from .core.database import engine, Base, AsyncSessionLocal
 from .api.v1 import auth, lessons, tasks, submissions, progress, achievements
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create all tables on startup
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # Auto-seed course on first run
+    async with AsyncSessionLocal() as db:
+        from .services.lesson_service import initialize_course
+        await initialize_course(db)
     yield
     await engine.dispose()
 
