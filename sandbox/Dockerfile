@@ -1,19 +1,21 @@
 # OneScript sandbox image for executing 1C scripts
-FROM --platform=linux/amd64 ubuntu:22.04
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV OSCRIPT_VERSION=1.9.4
+ENV OSCRIPT_VERSION=2.0.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget ca-certificates \
+    wget ca-certificates unzip libicu70 \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install OneScript (apt resolves Mono dependencies automatically)
-RUN wget -q "https://github.com/EvilBeaver/OneScript/releases/download/v${OSCRIPT_VERSION}/onescript-engine_${OSCRIPT_VERSION}_all.deb" \
-    -O /tmp/oscript.deb \
-    && apt-get install -y /tmp/oscript.deb \
-    && rm /tmp/oscript.deb \
-    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+# Download and install OneScript 2.0.0 (self-contained .NET, no Mono required)
+RUN wget -q "https://github.com/EvilBeaver/OneScript/releases/download/v${OSCRIPT_VERSION}/OneScript-${OSCRIPT_VERSION}-linux-x64.zip" \
+    -O /tmp/oscript.zip \
+    && unzip -q /tmp/oscript.zip -d /opt/oscript \
+    && rm /tmp/oscript.zip \
+    && OSCRIPT_BIN=$(find /opt/oscript -name "oscript" -type f | head -1) \
+    && chmod +x "$OSCRIPT_BIN" \
+    && ln -s "$OSCRIPT_BIN" /usr/local/bin/oscript \
     && oscript --version
 
 WORKDIR /code
