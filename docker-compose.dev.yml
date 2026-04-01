@@ -15,6 +15,13 @@ services:
       interval: 5s
       retries: 5
 
+  sandbox-builder:
+    build:
+      context: ./sandbox
+      dockerfile: Dockerfile
+    image: onec-sandbox:latest
+    command: ["--version"]
+
   backend:
     build:
       context: ./backend
@@ -34,6 +41,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      sandbox-builder:
+        condition: service_completed_successfully
 
   frontend:
     image: node:20-alpine
