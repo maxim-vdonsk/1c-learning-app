@@ -21,7 +21,7 @@ class Achievement(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     icon: Mapped[str] = mapped_column(String(10), nullable=False)
     xp_reward: Mapped[int] = mapped_column(Integer, default=50)
-    condition_type: Mapped[ConditionType] = mapped_column(Enum(ConditionType))
+    condition_type: Mapped[ConditionType] = mapped_column(Enum(ConditionType, native_enum=False))
     condition_value: Mapped[int] = mapped_column(Integer, nullable=False)
 
     user_achievements: Mapped[list["UserAchievement"]] = relationship(

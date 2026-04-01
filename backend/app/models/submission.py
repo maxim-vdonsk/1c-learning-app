@@ -23,7 +23,7 @@ class Submission(Base):
     code: Mapped[str] = mapped_column(Text, nullable=False)
     is_correct: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[SubmissionStatus] = mapped_column(
-        Enum(SubmissionStatus), default=SubmissionStatus.pending
+        Enum(SubmissionStatus, native_enum=False), default=SubmissionStatus.pending
     )
 
     execution_time_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
