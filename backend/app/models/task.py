@@ -24,7 +24,7 @@ class Task(Base):
     category: Mapped[str] = mapped_column(String(100), nullable=False, default="general")
 
     difficulty: Mapped[DifficultyEnum] = mapped_column(
-        Enum(DifficultyEnum), default=DifficultyEnum.easy
+        Enum(DifficultyEnum, native_enum=False), default=DifficultyEnum.easy
     )
 
     hints: Mapped[list] = mapped_column(JSON, default=list)
