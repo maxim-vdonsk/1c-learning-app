@@ -76,9 +76,10 @@ async def run_in_docker(code: str) -> SandboxResult:
 
         start = time.monotonic()
         try:
-            container = client.containers.run(
+            # ENTRYPOINT уже ["oscript"], поэтому command — только путь к скрипту
+            output_bytes = client.containers.run(
                 settings.SANDBOX_IMAGE,
-                command=f"oscript /code/solution.os",
+                command="/code/solution.os",
                 volumes={tmp_path: {"bind": "/code/solution.os", "mode": "ro"}},
                 mem_limit=settings.SANDBOX_MEMORY_LIMIT,
                 cpu_quota=settings.SANDBOX_CPU_QUOTA,
@@ -86,20 +87,17 @@ async def run_in_docker(code: str) -> SandboxResult:
                 remove=True,
                 detach=False,
                 stdout=True,
-                stderr=True,
+                stderr=False,
                 timeout=settings.SANDBOX_TIMEOUT_SECONDS + 2,
             )
             elapsed = int((time.monotonic() - start) * 1000)
-
-            output = container.decode("utf-8", errors="replace") if isinstance(container, bytes) else ""
+            output = output_bytes.decode("utf-8", errors="replace") if isinstance(output_bytes, bytes) else ""
             return SandboxResult(output=output.strip(), execution_time_ms=elapsed)
 
         except docker.errors.ContainerError as e:
             elapsed = int((time.monotonic() - start) * 1000)
-            return SandboxResult(
-                error=e.stderr.decode("utf-8", errors="replace") if e.stderr else str(e),
-                execution_time_ms=elapsed,
-            )
+            stderr_text = e.stderr.decode("utf-8", errors="replace") if e.stderr else str(e)
+            return SandboxResult(error=stderr_text, execution_time_ms=elapsed)
         finally:
             try:
                 os.unlink(tmp_path)
@@ -107,8 +105,8 @@ async def run_in_docker(code: str) -> SandboxResult:
                 pass
 
     except Exception as e:
-        logger.warning(f"Docker execution failed, falling back to subprocess: {e}")
-        return await run_onescript_subprocess(code)
+        logger.error(f"Docker execution failed: {e}")
+        return SandboxResult(error=f"Ошибка запуска sandbox: {e}")
 
 
 async def execute_code(code: str) -> SandboxResult:
@@ -117,7 +115,7 @@ async def execute_code(code: str) -> SandboxResult:
         return await run_in_docker(code)
     except Exception as e:
         logger.error(f"Sandbox execution error: {e}")
-        return await run_onescript_subprocess(code)
+        return SandboxResult(error=f"Ошибка выполнения кода: {e}")
 
 
 def check_test_case(output: str, expected: str) -> bool:
