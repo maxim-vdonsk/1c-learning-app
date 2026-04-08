@@ -6,30 +6,53 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-FALLBACK_THEORY = """
-## Тема урока
+def _build_fallback_theory(topic: str, week_number: int, lesson_order: int) -> str:
+    return f"""## {topic}
 
-Этот урок посвящён изучению языка программирования 1С.
+> Урок {lesson_order}, неделя {week_number}
+
+### Введение
+
+Эта тема является важной частью изучения языка 1С:Предприятие и OneScript.
+Внимательно прочитайте материал и попробуйте примеры в редакторе.
 
 ### Основные концепции
 
-Язык 1С:Предприятие — мощный инструмент для автоматизации бизнес-процессов.
-В OneScript реализован основной синтаксис языка 1С, что позволяет изучать
-программирование без установки полной платформы.
+Тема «**{topic}**» охватывает ключевые возможности языка 1С.
+
+В OneScript реализован полный синтаксис языка 1С:Предприятие, что позволяет
+изучать программирование без установки полной платформы.
 
 ### Пример кода
 
 ```1c
-// Простой пример на языке 1С
-Сообщить("Привет, мир!");
+// Пример по теме: {topic}
 
+// Объявление переменных
+Перем Результат;
+
+// Вывод сообщения
+Сообщить("Изучаем: {topic}");
+
+// Пример базовой конструкции
 Перем Число = 42;
-Сообщить("Число: " + Строка(Число));
+Сообщить("Значение: " + Строка(Число));
 ```
 
-### Практика
+### Как работать с материалом
 
-Попробуйте написать свою первую программу и выполните задание в разделе «Практика».
+1. Прочитайте описание темы
+2. Изучите пример кода выше
+3. Перейдите на вкладку **Практика** и выполните задание
+4. Используйте кнопку «Обновить теорию» для получения детального объяснения
+
+## Ключевые моменты
+
+- Язык 1С:Предприятие используется для автоматизации бизнес-процессов
+- OneScript позволяет запускать 1С-скрипты без полной платформы
+- Все примеры в курсе проверяются автоматически
+- Используйте `Сообщить()` для вывода результата в консоль
+- При затруднениях используйте подсказки в задании
 """
 
 FALLBACK_MOTIVATIONS = [
@@ -48,7 +71,7 @@ FALLBACK_FEEDBACK = [
 ]
 
 
-async def _ask_gpt(prompt: str, timeout: float = 30.0) -> Optional[str]:
+async def _ask_gpt(prompt: str, timeout: float = 12.0) -> Optional[str]:
     try:
         import g4f
         from g4f.client import AsyncClient
@@ -61,7 +84,13 @@ async def _ask_gpt(prompt: str, timeout: float = 30.0) -> Optional[str]:
             ),
             timeout=timeout,
         )
-        return response.choices[0].message.content
+        content = response.choices[0].message.content
+        if not content or not content.strip():
+            return None
+        return content
+    except asyncio.TimeoutError:
+        logger.warning(f"GPT request timed out after {timeout}s")
+        return None
     except Exception as e:
         logger.warning(f"GPT request failed: {e}")
         return None
@@ -92,8 +121,8 @@ async def generate_theory(topic: str, week_number: int, lesson_order: int) -> st
 
 Тема урока: {topic}"""
 
-    result = await _ask_gpt(prompt, timeout=60.0)
-    return result or FALLBACK_THEORY.replace("Тема урока", f"Тема урока: {topic}")
+    result = await _ask_gpt(prompt, timeout=20.0)
+    return result or _build_fallback_theory(topic, week_number, lesson_order)
 
 
 async def generate_task(topic: str, difficulty: str, week_number: int) -> dict:
@@ -148,7 +177,7 @@ async def generate_task(topic: str, difficulty: str, week_number: int) -> dict:
   "category": "1с-основы"
 }}"""
 
-    result = await _ask_gpt(prompt, timeout=45.0)
+    result = await _ask_gpt(prompt, timeout=20.0)
     if result:
         try:
             # Clean possible markdown code blocks
@@ -161,22 +190,48 @@ async def generate_task(topic: str, difficulty: str, week_number: int) -> dict:
         except Exception as e:
             logger.warning(f"Failed to parse task JSON: {e}")
 
-    # Fallback task
+    # Fallback task — specific to the topic and difficulty
+    difficulty_hints = {
+        "easy": [
+            f"Изучите синтаксис темы «{topic}» в разделе Теория",
+            "Используйте Сообщить() для вывода результата",
+            "Объявляйте переменные через Перем перед использованием",
+        ],
+        "medium": [
+            f"Вспомните ключевые конструкции из темы «{topic}»",
+            "Разбейте задачу на несколько шагов и реализуйте каждый",
+            "Проверьте граничные случаи перед отправкой",
+        ],
+        "hard": [
+            f"Примените продвинутые возможности темы «{topic}»",
+            "Думайте об эффективности алгоритма: можно ли сделать быстрее?",
+            "Обработайте возможные исключительные ситуации через Попытка...Исключение",
+        ],
+    }
     return {
-        "title": f"Задача по теме: {topic}",
+        "title": f"Практическое задание: {topic}",
         "description": (
             f"Напишите программу на языке 1С/OneScript по теме «{topic}».\n\n"
-            "Программа должна вывести результат через Сообщить()."
+            f"**Сложность:** {difficulty}\n\n"
+            "**Задание:** Используя знания из текущего урока, создайте программу, "
+            "которая демонстрирует работу с данной темой. "
+            "Программа должна вывести результат через `Сообщить()`.\n\n"
+            "**Ожидаемый вывод:** программа должна запуститься без ошибок "
+            "и вывести осмысленный результат."
         ),
-        "hints": [
-            "Используйте Сообщить() для вывода результата",
-            "Объявляйте переменные через Перем",
-            "Проверьте синтаксис перед отправкой",
-        ],
+        "hints": difficulty_hints.get(difficulty, difficulty_hints["easy"]),
         "test_cases": [
-            {"input": "", "expected_output": "Привет, мир!"},
+            {"input": "", "expected_output": ""},
         ],
-        "solution_template": "// Напишите ваш код здесь\n\nСообщить(\"Привет, мир!\");\n",
+        "solution_template": (
+            f"// Задание по теме: {topic}\n"
+            "// Напишите ваш код ниже\n\n"
+            "// Объявите нужные переменные\n"
+            "Перем Результат;\n\n"
+            "// Ваша логика здесь\n\n"
+            "// Выведите результат\n"
+            "Сообщить(Результат);\n"
+        ),
         "category": "1с-основы",
     }
 
@@ -201,7 +256,7 @@ async def analyze_code(code: str, task_description: str, is_correct: bool) -> tu
 Верни ТОЛЬКО JSON:
 {{"feedback": "текст обратной связи", "score": 85}}"""
 
-    result = await _ask_gpt(prompt, timeout=30.0)
+    result = await _ask_gpt(prompt, timeout=15.0)
     if result:
         try:
             cleaned = result.strip()
@@ -223,5 +278,5 @@ async def generate_motivation(username: str, xp: int, level: int) -> str:
 Имя: {username}, XP: {xp}, Уровень: {level}
 Одно предложение, вдохновляющее, на русском языке."""
 
-    result = await _ask_gpt(prompt, timeout=15.0)
+    result = await _ask_gpt(prompt, timeout=8.0)
     return result or random.choice(FALLBACK_MOTIVATIONS)
