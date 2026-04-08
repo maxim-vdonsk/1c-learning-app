@@ -48,11 +48,11 @@ ACHIEVEMENTS_SEED = [
     {
         "name": "all_lessons",
         "title": "Мастер 1С",
-        "description": "Завершите все 60 уроков",
+        "description": "Завершите все 84 урока",
         "icon": "👑",
         "xp_reward": 2000,
         "condition_type": ConditionType.lessons_completed,
-        "condition_value": 60,
+        "condition_value": 84,
     },
     {
         "name": "week_streak",

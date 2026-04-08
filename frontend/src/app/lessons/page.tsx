@@ -93,7 +93,7 @@ export default function LessonsPage() {
             </h1>
           </div>
           <p className="text-gray-400 text-sm font-mono">
-            12 недель · {course.total_lessons} уроков · Язык 1С:Предприятие & OneScript
+            12 недель · 7 уроков в неделю · {course.total_lessons} уроков · Язык 1С:Предприятие & OneScript
           </p>
 
           {/* Overall progress */}

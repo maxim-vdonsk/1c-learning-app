@@ -199,7 +199,7 @@ export default function DashboardPage() {
                     className="underline hover:text-white transition-colors"
                     style={{ color: "var(--neon-red)" }}
                   >
-                    Инициализировать курс (60 уроков)
+                    Инициализировать курс (84 урока)
                   </button>
                 </div>
               )}
