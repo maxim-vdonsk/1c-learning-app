@@ -103,23 +103,30 @@ async def get_lesson_theory(lesson_id: int, user: User, db: AsyncSession, regene
 
 
 async def initialize_course(db: AsyncSession) -> dict:
-    """Seed course structure from course_structure.py data."""
+    """Seed course structure from course_structure.py data. Idempotent — safe to call multiple times."""
     from ..data.course_structure import COURSE_STRUCTURE
 
     lesson_repo = LessonRepository(db)
-    existing_count = await lesson_repo.count_lessons()
-    if existing_count > 0:
-        return {"message": f"Курс уже инициализирован ({existing_count} уроков)"}
-
     created_lessons = 0
+    skipped_lessons = 0
+
     for week_data in COURSE_STRUCTURE:
-        week = await lesson_repo.create_week(
-            number=week_data["week"],
-            title=week_data["title"],
-            description=week_data["description"],
-        )
+        # Upsert week by number
+        week = await lesson_repo.get_week_by_number(week_data["week"])
+        if not week:
+            week = await lesson_repo.create_week(
+                number=week_data["week"],
+                title=week_data["title"],
+                description=week_data["description"],
+            )
+
         for i, lesson_data in enumerate(week_data["lessons"], 1):
             slug = re.sub(r"[^a-z0-9]+", "-", lesson_data["slug"].lower()).strip("-")
+            # Check by slug to avoid duplicates across workers
+            existing = await lesson_repo.get_lesson_by_slug(slug)
+            if existing:
+                skipped_lessons += 1
+                continue
             await lesson_repo.create_lesson(
                 week_id=week.id,
                 title=lesson_data["title"],
@@ -130,4 +137,5 @@ async def initialize_course(db: AsyncSession) -> dict:
             )
             created_lessons += 1
 
-    return {"message": f"Курс инициализирован: {created_lessons} уроков создано"}
+    total = created_lessons + skipped_lessons
+    return {"message": f"Курс инициализирован: {created_lessons} создано, {skipped_lessons} уже существовало (всего {total})"}
