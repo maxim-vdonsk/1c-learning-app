@@ -9,7 +9,7 @@ class Week(Base):
     __tablename__ = "weeks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    number: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
 

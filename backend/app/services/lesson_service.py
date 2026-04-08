@@ -103,39 +103,54 @@ async def get_lesson_theory(lesson_id: int, user: User, db: AsyncSession, regene
 
 
 async def initialize_course(db: AsyncSession) -> dict:
-    """Seed course structure from course_structure.py data. Idempotent — safe to call multiple times."""
+    """Seed course structure from course_structure.py data.
+    Fully idempotent: safe to call from multiple workers simultaneously.
+    Uses ON CONFLICT DO NOTHING at the DB level via try/except IntegrityError.
+    """
+    import logging
+    from sqlalchemy.exc import IntegrityError
     from ..data.course_structure import COURSE_STRUCTURE
 
+    logger = logging.getLogger(__name__)
     lesson_repo = LessonRepository(db)
     created_lessons = 0
     skipped_lessons = 0
 
     for week_data in COURSE_STRUCTURE:
-        # Upsert week by number
+        # Get or create week — handle race condition between workers
         week = await lesson_repo.get_week_by_number(week_data["week"])
         if not week:
-            week = await lesson_repo.create_week(
-                number=week_data["week"],
-                title=week_data["title"],
-                description=week_data["description"],
-            )
+            try:
+                week = await lesson_repo.create_week(
+                    number=week_data["week"],
+                    title=week_data["title"],
+                    description=week_data["description"],
+                )
+            except IntegrityError:
+                await db.rollback()
+                week = await lesson_repo.get_week_by_number(week_data["week"])
 
         for i, lesson_data in enumerate(week_data["lessons"], 1):
             slug = re.sub(r"[^a-z0-9]+", "-", lesson_data["slug"].lower()).strip("-")
-            # Check by slug to avoid duplicates across workers
-            existing = await lesson_repo.get_lesson_by_slug(slug)
-            if existing:
+            try:
+                await lesson_repo.create_lesson(
+                    week_id=week.id,
+                    title=lesson_data["title"],
+                    slug=slug,
+                    description=lesson_data["description"],
+                    topic=lesson_data["topic"],
+                    order=i,
+                )
+                created_lessons += 1
+            except IntegrityError:
+                await db.rollback()
                 skipped_lessons += 1
-                continue
-            await lesson_repo.create_lesson(
-                week_id=week.id,
-                title=lesson_data["title"],
-                slug=slug,
-                description=lesson_data["description"],
-                topic=lesson_data["topic"],
-                order=i,
-            )
-            created_lessons += 1
+                logger.debug(f"Lesson '{slug}' already exists, skipping")
 
     total = created_lessons + skipped_lessons
-    return {"message": f"Курс инициализирован: {created_lessons} создано, {skipped_lessons} уже существовало (всего {total})"}
+    return {
+        "message": (
+            f"Курс инициализирован: {created_lessons} создано, "
+            f"{skipped_lessons} уже существовало (всего {total})"
+        )
+    }
