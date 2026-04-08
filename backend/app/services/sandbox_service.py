@@ -1,9 +1,8 @@
 import asyncio
+import io
 import logging
-import os
-import tempfile
+import tarfile
 import time
-from typing import Optional
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -23,90 +22,67 @@ class SandboxResult:
         self.memory_used_mb = memory_used_mb
 
 
-async def run_onescript_subprocess(code: str) -> SandboxResult:
-    """Fallback: run OneScript via local subprocess if available."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".os", delete=False, encoding="utf-8") as f:
-        f.write(code)
-        tmp_path = f.name
+def _build_tar(code: str) -> bytes:
+    """Упаковать код в tar-архив для передачи в контейнер через put_archive."""
+    code_bytes = code.encode("utf-8")
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tar:
+        info = tarfile.TarInfo(name="solution.os")
+        info.size = len(code_bytes)
+        tar.addfile(info, io.BytesIO(code_bytes))
+    return buf.getvalue()
 
+
+def _run_docker_sync(code: str) -> SandboxResult:
+    """Синхронное выполнение кода в Docker-контейнере.
+    Использует put_archive вместо volume-монтирования, чтобы избежать
+    проблемы с путями хоста при Docker-in-Docker.
+    """
+    import docker
+    import docker.errors
+
+    client = docker.from_env()
+    container = None
     start = time.monotonic()
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "oscript", tmp_path,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        container = client.containers.create(
+            settings.SANDBOX_IMAGE,
+            command="/code/solution.os",
+            mem_limit=settings.SANDBOX_MEMORY_LIMIT,
+            cpu_quota=settings.SANDBOX_CPU_QUOTA,
+            network_disabled=True,
         )
-        try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=settings.SANDBOX_TIMEOUT_SECONDS
-            )
-            elapsed = int((time.monotonic() - start) * 1000)
-            return SandboxResult(
-                output=stdout.decode("utf-8", errors="replace").strip(),
-                error=stderr.decode("utf-8", errors="replace").strip(),
-                execution_time_ms=elapsed,
-                memory_used_mb=0.0,
-            )
-        except asyncio.TimeoutError:
-            proc.kill()
-            return SandboxResult(
-                error=f"Превышено время выполнения ({settings.SANDBOX_TIMEOUT_SECONDS}с)",
-                execution_time_ms=settings.SANDBOX_TIMEOUT_SECONDS * 1000,
-            )
+        # Копируем код в контейнер через tar — никаких путей хоста
+        container.put_archive("/code", _build_tar(code))
+        container.start()
+
+        exit_result = container.wait(timeout=settings.SANDBOX_TIMEOUT_SECONDS + 2)
+        elapsed = int((time.monotonic() - start) * 1000)
+
+        logs = container.logs(stdout=True, stderr=True)
+        output = logs.decode("utf-8", errors="replace").strip() if isinstance(logs, bytes) else ""
+        exit_code = exit_result.get("StatusCode", 0)
+
+        if exit_code != 0:
+            return SandboxResult(error=output, execution_time_ms=elapsed)
+        return SandboxResult(output=output, execution_time_ms=elapsed)
+
+    except Exception as e:
+        elapsed = int((time.monotonic() - start) * 1000)
+        logger.error(f"Docker execution error: {e}")
+        return SandboxResult(error=f"Ошибка sandbox: {e}", execution_time_ms=elapsed)
     finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
+        if container:
+            try:
+                container.remove(force=True)
+            except Exception:
+                pass
 
 
 async def run_in_docker(code: str) -> SandboxResult:
-    """Run OneScript code in Docker container with resource limits."""
-    try:
-        import docker
-        import docker.errors
-
-        client = docker.from_env()
-
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".os", delete=False, encoding="utf-8"
-        ) as f:
-            f.write(code)
-            tmp_path = f.name
-
-        start = time.monotonic()
-        try:
-            # ENTRYPOINT уже ["oscript"], поэтому command — только путь к скрипту
-            output_bytes = client.containers.run(
-                settings.SANDBOX_IMAGE,
-                command="/code/solution.os",
-                volumes={tmp_path: {"bind": "/code/solution.os", "mode": "ro"}},
-                mem_limit=settings.SANDBOX_MEMORY_LIMIT,
-                cpu_quota=settings.SANDBOX_CPU_QUOTA,
-                network_disabled=True,
-                remove=True,
-                detach=False,
-                stdout=True,
-                stderr=False,
-                timeout=settings.SANDBOX_TIMEOUT_SECONDS + 2,
-            )
-            elapsed = int((time.monotonic() - start) * 1000)
-            output = output_bytes.decode("utf-8", errors="replace") if isinstance(output_bytes, bytes) else ""
-            return SandboxResult(output=output.strip(), execution_time_ms=elapsed)
-
-        except docker.errors.ContainerError as e:
-            elapsed = int((time.monotonic() - start) * 1000)
-            stderr_text = e.stderr.decode("utf-8", errors="replace") if e.stderr else str(e)
-            return SandboxResult(error=stderr_text, execution_time_ms=elapsed)
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-
-    except Exception as e:
-        logger.error(f"Docker execution failed: {e}")
-        return SandboxResult(error=f"Ошибка запуска sandbox: {e}")
+    """Запустить код в Docker sandbox (неблокирующая обёртка)."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _run_docker_sync, code)
 
 
 async def execute_code(code: str) -> SandboxResult:
