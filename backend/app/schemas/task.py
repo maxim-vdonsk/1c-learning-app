@@ -32,5 +32,5 @@ class TaskFilter(BaseModel):
 
 class GenerateTaskRequest(BaseModel):
     topic: str
-    difficulty: str = "easy"
+    difficulty: Optional[str] = None  # если None — определяется автоматически по неделе урока
     lesson_id: Optional[int] = None

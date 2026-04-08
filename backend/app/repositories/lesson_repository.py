@@ -65,5 +65,6 @@ class LessonRepository:
         await self.db.commit()
 
     async def count_lessons(self) -> int:
-        result = await self.db.execute(select(Lesson))
-        return len(result.scalars().all())
+        from sqlalchemy import func
+        result = await self.db.execute(select(func.count()).select_from(Lesson))
+        return result.scalar() or 0

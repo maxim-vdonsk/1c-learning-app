@@ -57,7 +57,19 @@ async def generate_task(
     db: AsyncSession = Depends(get_db),
 ):
     from ...services import ai_service
-    task_data = await ai_service.generate_task(req.topic, req.difficulty, week_number=1)
+    from ...repositories.lesson_repository import LessonRepository
+    from ...services.task_service import _difficulty_for_week
+
+    # Определяем номер недели из урока для прогрессии сложности
+    week_number = 1
+    if req.lesson_id:
+        lesson_repo = LessonRepository(db)
+        lesson = await lesson_repo.get_lesson_by_id(req.lesson_id)
+        if lesson and lesson.week:
+            week_number = lesson.week.number
+
+    difficulty = req.difficulty or _difficulty_for_week(week_number)
+    task_data = await ai_service.generate_task(req.topic, difficulty, week_number=week_number)
     repo = TaskRepository(db)
     slug = re.sub(r"[^a-z0-9]+", "-", task_data["title"].lower())[:80] + f"-{uuid.uuid4().hex[:6]}"
     task = await repo.create(
@@ -65,7 +77,7 @@ async def generate_task(
         title=task_data["title"],
         slug=slug,
         description=task_data["description"],
-        difficulty=req.difficulty,
+        difficulty=difficulty,
         category=task_data.get("category", "1с-основы"),
         hints=task_data.get("hints", []),
         test_cases=task_data.get("test_cases", []),

@@ -16,10 +16,19 @@ from .achievement_service import check_and_award_achievements
 XP_REWARDS = {"easy": 30, "medium": 60, "hard": 100}
 
 
+def _difficulty_for_week(week_number: int) -> str:
+    """Прогрессия сложности: недели 1-4 → easy, 5-8 → medium, 9-12 → hard."""
+    if week_number <= 4:
+        return "easy"
+    elif week_number <= 8:
+        return "medium"
+    else:
+        return "hard"
+
+
 async def get_or_create_lesson_task(lesson_id: int, db: AsyncSession) -> TaskOut:
-    lesson_repo = __import__(
-        "app.repositories.lesson_repository", fromlist=["LessonRepository"]
-    ).LessonRepository(db)
+    from ..repositories.lesson_repository import LessonRepository
+    lesson_repo = LessonRepository(db)
     task_repo = TaskRepository(db)
 
     lesson = await lesson_repo.get_lesson_by_id(lesson_id)
@@ -30,9 +39,13 @@ async def get_or_create_lesson_task(lesson_id: int, db: AsyncSession) -> TaskOut
     if existing:
         return TaskOut.model_validate(existing)
 
+    # Прогрессия сложности по номеру недели
+    week_number = lesson.week.number
+    difficulty = _difficulty_for_week(week_number)
+
     # Generate new task via AI
     task_data = await ai_service.generate_task(
-        topic=lesson.topic, difficulty="easy", week_number=lesson.week_id
+        topic=lesson.topic, difficulty=difficulty, week_number=week_number
     )
 
     slug = re.sub(r"[^a-z0-9]+", "-", task_data["title"].lower())[:80] + f"-{uuid.uuid4().hex[:6]}"
@@ -41,7 +54,7 @@ async def get_or_create_lesson_task(lesson_id: int, db: AsyncSession) -> TaskOut
         title=task_data["title"],
         slug=slug,
         description=task_data["description"],
-        difficulty="easy",
+        difficulty=difficulty,
         category=task_data.get("category", "1с-основы"),
         hints=task_data.get("hints", []),
         test_cases=task_data.get("test_cases", []),

@@ -83,7 +83,7 @@ async def get_lesson_theory(lesson_id: int, user: User, db: AsyncSession, regene
     if not lesson.theory_content or regenerate:
         theory = await ai_service.generate_theory(
             topic=lesson.topic,
-            week_number=lesson.week_id,
+            week_number=lesson.week.number,
             lesson_order=lesson.order,
         )
         await lesson_repo.update_theory(lesson_id, theory, [])
