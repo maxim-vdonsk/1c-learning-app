@@ -104,35 +104,48 @@ async def get_lesson_theory(lesson_id: int, user: User, db: AsyncSession, regene
 
 async def initialize_course(db: AsyncSession) -> dict:
     """Seed course structure from course_structure.py data.
-    Fully idempotent: safe to call from multiple workers simultaneously.
-    Uses ON CONFLICT DO NOTHING at the DB level via try/except IntegrityError.
+    Uses PostgreSQL advisory lock so only one worker runs initialization at a time.
     """
-    import logging
-    from sqlalchemy.exc import IntegrityError
+    from sqlalchemy import text
     from ..data.course_structure import COURSE_STRUCTURE
 
-    logger = logging.getLogger(__name__)
-    lesson_repo = LessonRepository(db)
-    created_lessons = 0
-    skipped_lessons = 0
+    LOCK_ID = 20260408  # arbitrary unique int for this app
 
-    for week_data in COURSE_STRUCTURE:
-        # Get or create week — handle race condition between workers
-        week = await lesson_repo.get_week_by_number(week_data["week"])
-        if not week:
-            try:
+    lesson_repo = LessonRepository(db)
+
+    # Quick pre-check without acquiring lock
+    total_expected = sum(len(w["lessons"]) for w in COURSE_STRUCTURE)
+    existing_count = await lesson_repo.count_lessons()
+    if existing_count >= total_expected:
+        return {"message": f"Курс уже инициализирован ({existing_count} уроков)"}
+
+    # Try to acquire advisory lock — only one worker proceeds
+    lock_result = await db.execute(text("SELECT pg_try_advisory_lock(:id)"), {"id": LOCK_ID})
+    acquired = lock_result.scalar()
+    if not acquired:
+        return {"message": "Инициализация уже выполняется другим процессом"}
+
+    try:
+        # Re-check after acquiring lock (another worker might have finished)
+        existing_count = await lesson_repo.count_lessons()
+        if existing_count >= total_expected:
+            return {"message": f"Курс уже инициализирован ({existing_count} уроков)"}
+
+        created_lessons = 0
+        for week_data in COURSE_STRUCTURE:
+            week = await lesson_repo.get_week_by_number(week_data["week"])
+            if not week:
                 week = await lesson_repo.create_week(
                     number=week_data["week"],
                     title=week_data["title"],
                     description=week_data["description"],
                 )
-            except IntegrityError:
-                await db.rollback()
-                week = await lesson_repo.get_week_by_number(week_data["week"])
 
-        for i, lesson_data in enumerate(week_data["lessons"], 1):
-            slug = re.sub(r"[^a-z0-9]+", "-", lesson_data["slug"].lower()).strip("-")
-            try:
+            for i, lesson_data in enumerate(week_data["lessons"], 1):
+                slug = re.sub(r"[^a-z0-9]+", "-", lesson_data["slug"].lower()).strip("-")
+                existing = await lesson_repo.get_lesson_by_slug(slug)
+                if existing:
+                    continue
                 await lesson_repo.create_lesson(
                     week_id=week.id,
                     title=lesson_data["title"],
@@ -142,15 +155,7 @@ async def initialize_course(db: AsyncSession) -> dict:
                     order=i,
                 )
                 created_lessons += 1
-            except IntegrityError:
-                await db.rollback()
-                skipped_lessons += 1
-                logger.debug(f"Lesson '{slug}' already exists, skipping")
 
-    total = created_lessons + skipped_lessons
-    return {
-        "message": (
-            f"Курс инициализирован: {created_lessons} создано, "
-            f"{skipped_lessons} уже существовало (всего {total})"
-        )
-    }
+        return {"message": f"Курс инициализирован: {created_lessons} уроков создано"}
+    finally:
+        await db.execute(text("SELECT pg_advisory_unlock(:id)"), {"id": LOCK_ID})
