@@ -167,9 +167,9 @@ export default function LessonsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="hidden sm:flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                       <div
-                        className="h-1 w-20 rounded-full"
+                        className="h-1 w-12 sm:w-20 rounded-full"
                         style={{ background: "var(--cyber-border)" }}
                       >
                         <div

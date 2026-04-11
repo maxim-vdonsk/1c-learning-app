@@ -1,10 +1,15 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 
 export const metadata: Metadata = {
   title: "1С Академия — Изучайте 1С программирование",
   description: "Интерактивная платформа для изучения языка программирования 1С:Предприятие и OneScript",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

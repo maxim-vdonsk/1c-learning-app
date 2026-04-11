@@ -132,7 +132,7 @@ export default function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           className="mb-8"
         >
-          <h1 className="font-display font-bold text-2xl" style={{ color: "var(--neon-red)" }}>
+          <h1 className="font-display font-bold text-xl sm:text-2xl" style={{ color: "var(--neon-red)" }}>
             Привет, {data.username}! 👋
           </h1>
           <p className="text-gray-400 text-sm font-mono mt-1">
@@ -155,7 +155,7 @@ export default function DashboardPage() {
                 {s.icon}
                 <span className="text-xs font-mono text-gray-400">{s.label}</span>
               </div>
-              <div className={`font-display font-bold text-2xl ${s.glow}`}>
+              <div className={`font-display font-bold text-xl sm:text-2xl ${s.glow}`}>
                 {s.value}
               </div>
             </motion.div>

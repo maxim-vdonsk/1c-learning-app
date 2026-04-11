@@ -209,14 +209,14 @@ export default function CodeEditor({ task, lessonId, onTaskRegenerate }: Props) 
           </button>
         </div>
         <MonacoEditor
-          height="320px"
+          height={typeof window !== "undefined" && window.innerWidth < 640 ? "260px" : "320px"}
           language="onescript"
           value={code}
           onChange={(v) => setCode(v || "")}
           beforeMount={beforeMount}
           theme="vs-dark"
           options={{
-            fontSize: 14,
+            fontSize: typeof window !== "undefined" && window.innerWidth < 640 ? 13 : 14,
             fontFamily: "JetBrains Mono, Fira Code, monospace",
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
@@ -224,16 +224,17 @@ export default function CodeEditor({ task, lessonId, onTaskRegenerate }: Props) 
             roundedSelection: true,
             padding: { top: 12, bottom: 12 },
             suggest: { showKeywords: true },
+            wordWrap: "on",
           }}
         />
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row gap-2">
         <button
           onClick={handleSubmit}
           disabled={loading}
-          className="btn-neon flex-1 flex items-center justify-center gap-2 py-2.5 text-sm"
+          className="btn-neon flex-1 flex items-center justify-center gap-2 py-3 sm:py-2.5 text-sm"
         >
           <Play size={14} />
           {loading ? "Выполняется..." : "Запустить и проверить"}
@@ -242,7 +243,7 @@ export default function CodeEditor({ task, lessonId, onTaskRegenerate }: Props) 
         {task.hints.length > 0 && (
           <button
             onClick={showNextHint}
-            className="btn-secondary flex items-center gap-2 px-4 py-2.5 text-sm"
+            className="btn-secondary flex items-center justify-center gap-2 px-4 py-3 sm:py-2.5 text-sm"
             style={showHints ? { borderColor: "var(--neon-orange)", color: "var(--neon-orange)" } : {}}
           >
             <Lightbulb size={14} />

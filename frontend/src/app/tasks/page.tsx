@@ -59,6 +59,7 @@ export default function TasksPage() {
   const [genTopic, setGenTopic] = useState(ONEC_TOPICS[0]);
   const [genDiff, setGenDiff] = useState("easy");
   const [showGenPanel, setShowGenPanel] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"list" | "editor">("list");
 
   useEffect(() => {
     if (!token) { router.push("/auth"); return; }
@@ -101,12 +102,17 @@ export default function TasksPage() {
     loadTasks();
   };
 
+  const handleSelectTask = (t: Task) => {
+    setSelected(t);
+    setMobileTab("editor");
+  };
+
   return (
     <div className="min-h-screen bg-cyber-black">
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
           <div>
             <div className="flex items-center gap-2">
               <Code2 size={20} style={{ color: "var(--neon-green)" }} />
@@ -120,9 +126,11 @@ export default function TasksPage() {
           </div>
           <button
             onClick={() => setShowGenPanel(!showGenPanel)}
-            className="btn-neon flex items-center gap-2 px-4 py-2 text-xs"
+            className="btn-neon flex items-center gap-2 px-3 py-2 text-xs flex-shrink-0"
           >
-            <Plus size={14} /> Сгенерировать задачу
+            <Plus size={14} />
+            <span className="hidden sm:inline">Сгенерировать задачу</span>
+            <span className="sm:hidden">Задача</span>
           </button>
         </div>
 
@@ -172,9 +180,35 @@ export default function TasksPage() {
           </motion.div>
         )}
 
+        {/* Mobile tabs */}
+        <div className="flex lg:hidden gap-1 mb-4 p-1 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid var(--cyber-border)" }}>
+          <button
+            onClick={() => setMobileTab("list")}
+            className="flex-1 py-2 rounded text-xs font-mono transition-all"
+            style={
+              mobileTab === "list"
+                ? { background: "rgba(255,136,0,0.15)", color: "var(--neon-orange)", border: "1px solid rgba(255,136,0,0.3)" }
+                : { color: "#666", border: "1px solid transparent" }
+            }
+          >
+            Список задач
+          </button>
+          <button
+            onClick={() => setMobileTab("editor")}
+            className="flex-1 py-2 rounded text-xs font-mono transition-all"
+            style={
+              mobileTab === "editor"
+                ? { background: "rgba(255,136,0,0.15)", color: "var(--neon-orange)", border: "1px solid rgba(255,136,0,0.3)" }
+                : { color: "#666", border: "1px solid transparent" }
+            }
+          >
+            {selected ? selected.title.length > 20 ? selected.title.slice(0, 20) + "…" : selected.title : "Редактор"}
+          </button>
+        </div>
+
         <div className="grid lg:grid-cols-5 gap-6">
           {/* Left: task list */}
-          <div className="lg:col-span-2 space-y-3">
+          <div className={`lg:col-span-2 space-y-3 ${mobileTab === "editor" ? "hidden lg:block" : ""}`}>
             {/* Filters */}
             <div className="space-y-2">
               <form onSubmit={handleSearch} className="flex gap-2">
@@ -193,7 +227,7 @@ export default function TasksPage() {
                   <button
                     key={d}
                     onClick={() => setDifficulty(d)}
-                    className="flex-1 py-1 rounded text-xs font-mono transition-all"
+                    className="flex-1 py-1.5 rounded text-xs font-mono transition-all"
                     style={
                       difficulty === d
                         ? {
@@ -213,7 +247,7 @@ export default function TasksPage() {
             </div>
 
             {/* Task list */}
-            <div className="space-y-1 max-h-[600px] overflow-y-auto pr-1">
+            <div className="space-y-1 max-h-[calc(100vh-300px)] overflow-y-auto pr-1">
               {loading ? (
                 <div className="text-xs font-mono text-gray-500 text-center py-8 animate-pulse">
                   Загрузка...
@@ -226,7 +260,7 @@ export default function TasksPage() {
                 taskList.map((t) => (
                   <button
                     key={t.id}
-                    onClick={() => setSelected(t)}
+                    onClick={() => handleSelectTask(t)}
                     className="w-full text-left p-3 rounded-lg transition-all"
                     style={
                       selected?.id === t.id
@@ -257,7 +291,7 @@ export default function TasksPage() {
           </div>
 
           {/* Right: editor */}
-          <div className="lg:col-span-3">
+          <div className={`lg:col-span-3 ${mobileTab === "list" ? "hidden lg:block" : ""}`}>
             {selected ? (
               <CodeEditor task={selected} />
             ) : (
